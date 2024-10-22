@@ -1,50 +1,71 @@
+// Importe o necessário do arquivo server.js
+import { Usuario } from './modelo/usuario';
+
 // Elementos do DOM
 const dashboard = document.querySelector('#dashboard');
 const dashboardContent = document.querySelector('#dashboardContent');
 const modalContainer = document.querySelector('#modalContainer');
 const modalTitle = document.querySelector('#modalTitle');
-const modalContent = document.querySelector('#modalContent');
+const modalContent =document.querySelector('#modalContent');
 const btnCloseModal = document.querySelector('#btnCloseModal');
 const btnLogout = document.querySelector('#btnLogout');
 
-let tipoUsuarioAtual = 'Administrador'; // Definido inicialmente, deve ser atualizado após o login
+// Variáveis globais
+let tipoUsuarioAtual = '';
+let idUsuarioAtual = null;
+let idCelulaAtual = null;
+
+// Funções auxiliares
+function mostrarElemento(elemento) {
+    elemento.classList.remove('hidden');
+}
+
+function ocultarElemento(elemento) {
+    elemento.classList.add('hidden');
+}
+
 
 // Função para carregar o conteúdo do dashboard
-export function carregarDashboard(tipoUsuario) {
+export async function carregarDashboard(tipoUsuario, idUsuario, idCelula) {
     tipoUsuarioAtual = tipoUsuario;
-    let url = 'http://localhost:3000/usuarios';
-    if (tipoUsuario === 'LiderCelula') {
-        // Assumindo que há um endpoint para buscar usuários de uma célula específica
-        url += '/celula/1'; // Substitua '1' pelo ID da célula do líder
+    idUsuarioAtual = idUsuario;
+    idCelulaAtual = idCelula;
+    
+    console.log('Carregando dashboard:', { tipoUsuario, idUsuario, idCelula });
+
+    let url = '/.netlify/functions/server/usuarios';
+    
+    if (tipoUsuario === 'LiderCelula' && idCelula) {
+        url = `/celulas/${idCelula}/usuarios`;
     } else if (tipoUsuario === 'UsuarioComum') {
-        // Assumindo que o ID do usuário está armazenado em algum lugar (por exemplo, localStorage)
-        const usuarioId = localStorage.getItem('usuarioId');
-        url += `/${usuarioId}`;
+        url = `/usuarios/${idUsuario}`;
     }
 
-    fetch(url)
-        .then(response => response.json())
-        .then(dados => {
-            let conteudo = '';
-            switch (tipoUsuario) {
-                case 'Administrador':
-                    conteudo = gerarConteudoAdmin(dados);
-                    break;
-                case 'LiderCelula':
-                    conteudo = gerarConteudoLider(dados);
-                    break;
-                case 'UsuarioComum':
-                    conteudo = gerarConteudoUsuario(dados);
-                    break;
-            }
-            dashboardContent.innerHTML = conteudo;
-            adicionarEventosDashboard();
-        })
-        .catch(error => {
-            console.error('Erro ao carregar os dados da dashboard:', error);
-            dashboardContent.innerHTML = '<p class="text-red-500">Erro ao carregar os dados. Por favor, tente novamente mais tarde.</p>';
-        });
+    try {
+        const response = await fetch(url);
+        const dados = await response.json();
+
+        console.log('Dados recebidos:', dados);
+        let conteudo = '';
+        switch (tipoUsuario) {
+            case 'Administrador':
+                conteudo = gerarConteudoAdmin(dados);
+                break;
+            case 'LiderCelula':
+                conteudo = gerarConteudoLider(dados);
+                break;
+            case 'UsuarioComum':
+                conteudo = gerarConteudoUsuario(dados);
+                break;
+        }
+        dashboardContent.innerHTML = conteudo;
+        adicionarEventosDashboard();
+    } catch (error) {
+        console.error('Erro ao carregar os dados da dashboard:', error);
+        dashboardContent.innerHTML = '<p class="text-red-500">Erro ao carregar os dados. Por favor, tente novamente mais tarde.</p>';
+    }
 }
+
 
 function gerarConteudoAdmin(dados) {
     let html = '<h2 class="text-2xl font-bold mb-4">Painel do Administrador</h2>';
@@ -57,8 +78,9 @@ function gerarConteudoAdmin(dados) {
                     <h3 class="card-title">${usuario.nomeCompleto}</h3>
                     <p>Email: ${usuario.email}</p>
                     <p>Tipo: ${usuario.tipoUsuario}</p>
+                    <p>Célula: ${usuario.idCelula ? 'Associado' : 'Não associado'}</p>
                     <div class="card-actions justify-end mt-2">
-                        <button class="btn btn-primary btn-sm btn-detalhes" data-id="${usuario.id}">Detalhes</button>
+                        <button class="btn btn-primary btn-sm btn-detalhes" data-id="${usuario._id}">Detalhes</button>
                     </div>
                 </div>
             </div>
@@ -71,29 +93,33 @@ function gerarConteudoAdmin(dados) {
 
 function gerarConteudoLider(dados) {
     let html = '<h2 class="text-2xl font-bold mb-4">Painel do Líder de Célula</h2>';
-    html += '<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">';
     
-    dados.forEach(usuario => {
-        html += `
-            <div class="card bg-base-100 shadow-xl user-card">
-                <div class="card-body">
-                    <h3 class="card-title">${usuario.nomeCompleto}</h3>
-                    <p>Email: ${usuario.email}</p>
-                    <p>Célula: ${usuario.nomeCelula}</p>
-                    <div class="card-actions justify-end mt-2">
-                        <button class="btn btn-primary btn-sm btn-detalhes" data-id="${usuario.id}">Detalhes</button>
+    if (!Array.isArray(dados) || dados.length === 0) {
+        html += '<p>Nenhum membro encontrado para esta célula.</p>';
+    } else {
+        html += '<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">';
+        dados.forEach(usuario => {
+            html += `
+                <div class="card bg-base-100 shadow-xl user-card">
+                    <div class="card-body">
+                        <h3 class="card-title">${usuario.nomeCompleto}</h3>
+                        <p>Email: ${usuario.email}</p>
+                        <p>Célula: ${usuario.idCelula ? 'Associado' : 'Não associado'}</p>
+                        <div class="card-actions justify-end mt-2">
+                            <button class="btn btn-primary btn-sm btn-detalhes" data-id="${usuario._id}">Detalhes</button>
+                        </div>
                     </div>
                 </div>
-            </div>
-        `;
-    });
+            `;
+        });
+        html += '</div>';
+    }
     
-    html += '</div>';
     return html;
 }
 
-function gerarConteudoUsuario(dados) {
-    const usuario = dados;
+
+function gerarConteudoUsuario(usuario) {
     let html = '<h2 class="text-2xl font-bold mb-4">Meu Perfil</h2>';
     html += `
         <div class="card bg-base-100 shadow-xl">
@@ -101,15 +127,16 @@ function gerarConteudoUsuario(dados) {
                 <h3 class="card-title">${usuario.nomeCompleto}</h3>
                 <p>Email: ${usuario.email}</p>
                 <p>Telefone: ${usuario.telefone}</p>
-                <p>Célula: ${usuario.nomeCelula || 'Não participa'}</p>
+                <p>Célula: ${usuario.idCelula ? 'Associado' : 'Não participa'}</p>
                 <div class="card-actions justify-end mt-2">
-                    <button class="btn btn-primary btn-sm btn-detalhes" data-id="${usuario.id}">Ver Mais Detalhes</button>
+                    <button class="btn btn-primary btn-sm btn-detalhes" data-id="${usuario._id}">Ver Mais Detalhes</button>
                 </div>
             </div>
         </div>
     `;
     return html;
 }
+
 
 function adicionarEventosDashboard() {
     const btnDetalhes = document.querySelectorAll('.btn-detalhes');
@@ -118,115 +145,266 @@ function adicionarEventosDashboard() {
     });
 }
 
-function mostrarDetalhesUsuario(id) {
-    fetch(`http://localhost:3000/usuarios/${id}`)
-        .then(response => response.json())
-        .then(usuario => {
-            modalTitle.textContent = `Detalhes de ${usuario.nomeCompleto}`;
-            let conteudo = `
-                <p><strong>Email:</strong> ${usuario.email}</p>
-                <p><strong>Telefone:</strong> ${usuario.telefone}</p>
-                <p><strong>Data de Nascimento:</strong> ${new Date(usuario.dataNascimento).toLocaleDateString()}</p>
-                <p><strong>Concluiu Batismo:</strong> ${usuario.concluiuBatismo ? 'Sim' : 'Não'}</p>
-                <p><strong>Participou do Café:</strong> ${usuario.participouCafe ? 'Sim' : 'Não'}</p>
-                <p><strong>Participa de Ministério:</strong> ${usuario.participaMinisterio ? 'Sim' : 'Não'}</p>
-                <p><strong>Ministério:</strong> ${usuario.nomeMinisterio || 'Não participa'}</p>
-                <p><strong>Participa de Célula:</strong> ${usuario.participaCelula ? 'Sim' : 'Não'}</p>
-                <p><strong>Célula:</strong> ${usuario.nomeCelula || 'Não participa'}</p>
-                <h4 class="font-semibold mt-2">Cursos Concluídos:</h4>
-                <ul>
-                    ${usuario.cursoMeuNovoCaminho ? '<li>Meu Novo Caminho</li>' : ''}
-                    ${usuario.cursoVidaDevocional ? '<li>Vida Devocional</li>' : ''}
-                    ${usuario.cursoFamiliaCrista ? '<li>Família Cristã</li>' : ''}
-                    ${usuario.cursoVidaProsperidade ? '<li>Vida de Prosperidade</li>' : ''}
-                    ${usuario.cursoPrincipiosAutoridade ? '<li>Princípios de Autoridade</li>' : ''}
-                    ${usuario.cursoVidaEspirito ? '<li>Vida no Espírito</li>' : ''}
-                    ${usuario.cursoCaraterCristo ? '<li>Caráter de Cristo</li>' : ''}
-                    ${usuario.cursoIdentidadesRestauradas ? '<li>Identidades Restauradas</li>' : ''}
-                </ul>
-            `;
 
-            if (tipoUsuarioAtual === 'Administrador' || (tipoUsuarioAtual === 'LiderCelula' && usuario.tipoUsuario !== 'Administrador')) {
-                conteudo += `
-                    <div class="flex justify-end mt-4">
-                        <button class="btn btn-primary btn-sm mr-2" onclick="editarUsuario(${usuario.id})">Editar</button>
-                        <button class="btn btn-error btn-sm mr-2" onclick="deletarUsuario(${usuario.id})">Deletar</button>
-                `;
-                
-                if (tipoUsuarioAtual === 'Administrador' && usuario.tipoUsuario !== 'Administrador') {
-                    conteudo += `
-                        <button class="btn btn-info btn-sm" onclick="tornarLider(${usuario.id})">Tornar Líder</button>
+async function mostrarDetalhesUsuario(id) {
+    if (!id) {
+        console.error('ID do usuário não definido');
+        alert('Erro: ID do usuário não definido');
+        return;
+    }
+
+    try {
+        const response = await fetch(`/.netlify/functions/server/usuarios/${id}`);
+        const usuario = await response.json();
+
+        modalTitle.textContent = `Detalhes de ${usuario.nomeCompleto}`;
+        const conteudoModal = document.querySelector('#conteudoDetalhesUsuario').innerHTML;
+        modalContent.innerHTML = conteudoModal;
+        
+        // Preencher os detalhes do usuário
+        document.querySelector('#detalhesEmail').textContent = usuario.email || 'Não disponível';
+        document.querySelector('#detalhesTelefone').textContent = usuario.telefone || 'Não disponível';
+        document.querySelector('#detalhesDataNascimento').textContent = usuario.dataNascimento ? new Date(usuario.dataNascimento).toLocaleDateString() : 'Não disponível';
+        document.querySelector('#detalhesTipoUsuario').textContent = usuario.tipoUsuario || 'Não disponível';
+        document.querySelector('#detalhesConcluiuBatismo').textContent = usuario.concluiuBatismo ? 'Sim' : 'Não';
+        document.querySelector('#detalhesParticipouCafe').textContent = usuario.participouCafe ? 'Sim' : 'Não';
+        document.querySelector('#detalhesParticipaMinisterio').textContent = usuario.participaMinisterio ? 'Sim' : 'Não';
+        document.querySelector('#detalhesMinisterio').textContent = usuario.nomeMinisterio || 'Não participa';
+        document.querySelector('#detalhesParticipaCelula').textContent = usuario.idCelula ? 'Sim' : 'Não';
+        document.querySelector('#detalhesCelula').textContent = usuario.idCelula ? 'Associado' : 'Não participa';
+
+
+        // Preencher cursos concluídos
+        const listaCursos = document.querySelector('#listaCursosConcluidos');
+        listaCursos.innerHTML = '';
+        if (usuario.cursoMeuNovoCaminho) listaCursos.innerHTML += '<li>Meu Novo Caminho</li>';
+        if (usuario.cursoVidaDevocional) listaCursos.innerHTML += '<li>Vida Devocional</li>';
+        if (usuario.cursoFamiliaCrista) listaCursos.innerHTML += '<li>Família Cristã</li>';
+        if (usuario.cursoVidaProsperidade) listaCursos.innerHTML += '<li>Vida de Prosperidade</li>';
+        if (usuario.cursoPrincipiosAutoridade) listaCursos.innerHTML += '<li>Princípios de Autoridade</li>';
+        if (usuario.cursoVidaEspirito) listaCursos.innerHTML += '<li>Vida no Espírito</li>';
+        if (usuario.cursoCaraterCristo) listaCursos.innerHTML += '<li>Caráter de Cristo</li>';
+        if (usuario.cursoIdentidadesRestauradas) listaCursos.innerHTML += '<li>Identidades Restauradas</li>';
+
+        // Adicionar botões de ação conforme o tipo de usuário
+        const acoesUsuario = document.querySelector('#acoesUsuario');
+        acoesUsuario.innerHTML = '';
+        if (tipoUsuarioAtual === 'Administrador' || (tipoUsuarioAtual === 'LiderCelula' && usuario.tipoUsuario !== 'Administrador')) {
+            acoesUsuario.innerHTML += `
+                <button class="btn btn-primary btn-sm mr-2" onclick="editarUsuario('${usuario._id}')">Editar</button>
+                <button class="btn btn-error btn-sm mr-2" onclick="deletarUsuario('${usuario._id}')">Deletar</button>
+            `;
+            
+            if (tipoUsuarioAtual === 'Administrador') {
+                if (usuario.tipoUsuario !== 'Administrador' && usuario.tipoUsuario !== 'LiderCelula') {
+                    acoesUsuario.innerHTML += `
+                        <button class="btn btn-info btn-sm" onclick="tornarLider('${usuario._id}')">Tornar Líder</button>
+                    `;
+                } else if (usuario.tipoUsuario === 'LiderCelula') {
+                    acoesUsuario.innerHTML += `
+                        <button class="btn btn-warning btn-sm" onclick="rebaixarLider('${usuario._id}')">Rebaixar para Usuário Comum</button>
                     `;
                 }
-                
-                conteudo += `</div>`;
+            }
+        }
+
+        modalContainer.classList.add('modal-open');
+    } catch (error) {
+        console.error('Erro ao carregar detalhes do usuário:', error);
+        alert(`Erro ao carregar detalhes do usuário: ${error.message}`);
+    }
+}
+
+
+async function editarUsuario(id) {
+    try {
+        const response = await fetch(`/.netlify/functions/server/usuarios/${id}`);
+        const usuario = await response.json();
+
+        modalTitle.textContent = `Editar ${usuario.nomeCompleto}`;
+        modalContent.innerHTML = `
+            <form id="formEditarUsuario">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-control">
+                        <label class="label">
+                            <span class="label-text">Nome Completo</span>
+                        </label>
+                        <input type="text" id="editNomeCompleto" class="input input-bordered" value="${usuario.nomeCompleto}" required>
+                    </div>
+                    <div class="form-control">
+                        <label class="label">
+                            <span class="label-text">Email</span>
+                        </label>
+                        <input type="email" id="editEmail" class="input input-bordered" value="${usuario.email}" required>
+                    </div>
+                    <div class="form-control">
+                        <label class="label">
+                            <span class="label-text">Telefone</span>
+                        </label>
+                        <input type="tel" id="editTelefone" class="input input-bordered" value="${usuario.telefone}" required>
+                    </div>
+                    <div class="form-control">
+                        <label class="label">
+                            <span class="label-text">Data de Nascimento</span>
+                        </label>
+                        <input type="date" id="editDataNascimento" class="input input-bordered" value="${new Date(usuario.dataNascimento).toISOString().split('T')[0]}" required>
+                    </div>
+                </div>
+                <div class="form-control mt-6">
+                    <button type="submit" class="btn btn-primary">Salvar Alterações</button>
+                </div>
+            </form>
+        `;
+
+        document.querySelector('#formEditarUsuario').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const dadosAtualizados = {
+                nomeCompleto: document.querySelector('#editNomeCompleto').value,
+                email: document.querySelector('#editEmail').value,
+                telefone: document.querySelector('#editTelefone').value,
+                dataNascimento: document.querySelector('#editDataNascimento').value,
+            };
+
+            try {
+                await fetch(`/.netlify/functions/server/usuarios/${id}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(dadosAtualizados),
+                });
+                alert('Usuário atualizado com sucesso!');
+                fecharModal();
+                carregarDashboard(tipoUsuarioAtual);
+            } catch (error) {
+                console.error('Erro ao atualizar usuário:', error);
+                alert('Erro ao atualizar usuário');
+            }
+        });
+    } catch (error) {
+        console.error('Erro ao carregar dados para edição:', error);
+        modalContent.innerHTML = '<p class="text-red-500">Erro ao carregar dados para edição. Por favor, tente novamente.</p>';
+    }
+}
+
+async function deletarUsuario(id) {
+    if (!id) {
+        console.error('ID do usuário não definido');
+        alert('Erro: ID do usuário não definido');
+        return;
+    }
+
+    if (confirm('Tem certeza que deseja deletar este usuário?')) {
+        try {
+            const response = await fetch(`/.netlify/functions/server/usuarios/${id}`, { method: 'DELETE' });
+            const data = await response.json();
+            console.log('Resposta do servidor:', data);
+            alert('Usuário deletado com sucesso');
+            fecharModal();
+            carregarDashboard(tipoUsuarioAtual, idUsuarioAtual, idCelulaAtual);
+        } catch (error) {
+            console.error('Erro detalhado ao deletar usuário:', error);
+            alert(`Erro ao deletar usuário: ${error.detalhes || error.message || 'Erro desconhecido'}`);
+        }
+    }
+}
+
+
+async function tornarLider(id) {
+    if (!id) {
+        console.error('ID do usuário não definido');
+        alert('Erro: ID do usuário não definido');
+        return;
+    }
+
+    if (confirm('Tem certeza que deseja tornar este usuário um líder de célula?')) {
+        const tornarLiderBtn = document.querySelector(`#btnTornarLider${id}`);
+        if (tornarLiderBtn) tornarLiderBtn.disabled = true; // Desabilita o botão para evitar múltiplos cliques
+
+        try {
+            const response = await fetch(`/.netlify/functions/server/usuarios/${id}/tornar-lider`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            });
+
+            if (!response.ok) {
+                const err = await response.json();
+                throw err;
             }
 
-            modalContent.innerHTML = conteudo;
-            modalContainer.classList.add('modal-open');
-        })
-        .catch(error => {
-            console.error('Erro ao carregar detalhes do usuário:', error);
-            modalContent.innerHTML = '<p class="text-red-500">Erro ao carregar detalhes. Por favor, tente novamente.</p>';
-        });
-}
-
-function editarUsuario(id) {
-    // Implementar lógica de edição
-    console.log(`Editar usuário ${id}`);
-    // Aqui você pode abrir um novo modal com um formulário de edição
-    // ou redirecionar para uma página de edição
-}
-
-function deletarUsuario(id) {
-    if (confirm('Tem certeza que deseja deletar este usuário?')) {
-        fetch(`http://localhost:3000/usuarios/${id}`, { method: 'DELETE' })
-            .then(response => response.json())
-            .then(data => {
-                alert('Usuário deletado com sucesso');
-                fecharModal();
-                carregarDashboard(tipoUsuarioAtual); // Recarregar a dashboard
-            })
-            .catch(error => {
-                console.error('Erro ao deletar usuário:', error);
-                alert('Erro ao deletar usuário');
-            });
-    }
-}
-
-function tornarLider(id) {
-    if (confirm('Tem certeza que deseja tornar este usuário um líder de célula?')) {
-        fetch(`http://localhost:3000/usuarios/${id}`, {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ tipoUsuario: 'LiderCelula' })
-        })
-        .then(response => response.json())
-        .then(data => {
+            const data = await response.json();
+            console.log('Resposta do servidor:', data);
             alert('Usuário promovido a líder de célula com sucesso');
             fecharModal();
-            carregarDashboard(tipoUsuarioAtual); // Recarregar a dashboard
-        })
-        .catch(error => {
+            carregarDashboard(tipoUsuarioAtual, idUsuarioAtual, idCelulaAtual);
+        } catch (error) {
             console.error('Erro ao promover usuário:', error);
-            alert('Erro ao promover usuário');
-        });
+            alert(`Erro ao promover usuário: ${error.detalhes || error.message || 'Erro desconhecido'}`);
+        } finally {
+            if (tornarLiderBtn) tornarLiderBtn.disabled = false; // Reabilita o botão após a operação
+        }
     }
 }
 
-function fecharModal() {
-    modalContainer.classList.remove('modal-open');
+
+async function rebaixarLider(id) {
+    if (confirm('Tem certeza que deseja rebaixar este líder para usuário comum?')) {
+        try {
+            const response = await fetch(`/.netlify/functions/server/usuarios/${id}/rebaixar-lider`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            });
+
+            if (!response.ok) {
+                const err = await response.json();
+                throw err;
+            }
+
+            const data = await response.json();
+            console.log('Resposta do servidor:', data);
+            alert('Usuário rebaixado para usuário comum com sucesso');
+            fecharModal();
+            carregarDashboard(tipoUsuarioAtual, idUsuarioAtual, idCelulaAtual);
+        } catch (error) {
+            console.error('Erro ao rebaixar usuário:', error);
+            alert(`Erro ao rebaixar usuário: ${error.detalhes || error.message || 'Erro desconhecido'}`);
+        }
+    }
 }
 
-// Event listeners
+// Função para fechar o modal
+function fecharModal() {
+    modalContainer.classList.remove('modal-open');
+    modalTitle.textContent = '';
+    modalContent.innerHTML = '';
+}
+
+// Evento para fechar o modal quando o botão de fechar é clicado
 btnCloseModal.addEventListener('click', fecharModal);
-btnLogout.addEventListener('click', () => {
-    // Implementar lógica de logout
-    console.log('Logout');
-    // Redirecionar para a página de login ou limpar a sessão
+
+// Evento para fechar o modal clicando fora do conteúdo do modal
+modalContainer.addEventListener('click', (event) => {
+    if (event.target === modalContainer) {
+        fecharModal();
+    }
 });
 
-// Inicialização da dashboard
-carregarDashboard(tipoUsuarioAtual);
+// Função que desloga da dashboard e limpa os campos
+document.querySelector('#btnLogout').addEventListener('click', function() {
+    ocultarElemento(dashboard);
+    mostrarElemento(loginForm);
+    // Limpar campos de login
+    document.querySelector('#loginUsuario').value = '';
+    document.querySelector('#senhalogin').value = '';
+});
+
+// Tornar as funções globais para que possam ser chamadas pelo onclick no HTML
+window.editarUsuario = editarUsuario;
+window.deletarUsuario = deletarUsuario;
+window.tornarLider = tornarLider;
+window.rebaixarLider = rebaixarLider;
+window.fecharModal = fecharModal;

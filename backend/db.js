@@ -1,23 +1,16 @@
-const mysql = require("mysql2/promise");
+const mongoose = require('mongoose');
 
-const pool = mysql.createPool({
-  host: "localhost",
-  user: "root",
-  password: "Acasadopai102030", 
-  database: "casaDoPai",
-});
-
-// Testando a conexão
-async function testConnection() {
+async function connectToDatabase() {
   try {
-    const connection = await pool.getConnection();
-    console.log("Conexão ao banco de dados bem-sucedida!");
-    connection.release();
+    await mongoose.connect('mongodb+srv://gebe:IfkC2SpyBwOarhN8@casadopai3.h80d9.mongodb.net/?retryWrites=true&w=majority&appName=casaDoPai3', {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+    });
+    console.log('Conexão ao banco de dados MongoDB bem-sucedida!');
   } catch (error) {
-    console.error("Erro ao conectar ao banco de dados:", error);
+    console.error('Erro ao conectar ao banco de dados MongoDB:', error);
+    throw error;
   }
 }
 
-testConnection(); // Testa a conexão ao iniciar o servidor
-
-module.exports = pool;
+module.exports = { connectToDatabase };
